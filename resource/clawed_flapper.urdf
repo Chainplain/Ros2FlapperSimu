@@ -1,0 +1,6 @@
+<?xml version="1.0" ?>
+<robot name="ClawedFlapper">
+    <webots>
+        <plugin type="clawed_flapper.my_clawed_flapper.ClawedFlapperDriver" />
+    </webots>
+</robot>
