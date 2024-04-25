@@ -30,7 +30,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'my_clawed_flapper = clawed_flapper.my_clawed_flapper:main'
+            'my_clawed_flapper = clawed_flapper.my_clawed_flapper:main',
+            'reduced_att_controller = clawed_flapper.reduced_att_controller:main'
         ],
     },
 )

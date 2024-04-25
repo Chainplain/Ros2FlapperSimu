@@ -7,8 +7,10 @@ from   lib.Bladelement import BladeAeroCalculator as BAC
 from   lib.RotationComputation import GetUnitDirection_Safe
 # from   lib.RotationComputation import Angle_Trajectory_Generator as ATG
 from   lib.FilterLib import Low_Pass_Second_Order_Filter as LPSF
-from flapper_messages.msg import Sphere
 from flapper_messages.msg import AngularVel
+from flapper_messages.msg import UnderactuatedAttGamma
+from flapper_messages.msg import UnderactuatedCom
+from flapper_messages.msg import Translation
 
 
 from std_msgs.msg import String
@@ -33,7 +35,8 @@ class ClawedFlapperDriver:
         print("Starting!!")
         
         self.flapper = webots_node.robot
-        print("Supervior initialized!!")
+        print("Supervisor initialized!!")
+        # Okay, let us say it a supervisor, it can actually manipulate the position directly.
         
         
         
@@ -46,8 +49,19 @@ class ClawedFlapperDriver:
         # self.sphere_def.y = 0.0
         # self.sphere_def.z = 0.0
         # self.sphere_def.radius = 0.0
-        self. angular_vel_publisher = self.__node . create_publisher(AngularVel, 'angular_vel_topic', 10)
-
+        self. angular_vel_publisher         = self.__node . create_publisher(AngularVel, 'angular_vel_topic', 10)
+        self. reduced_att_gamma_publisher   = self.__node . create_publisher(UnderactuatedAttGamma, 'un_att_gamma_topic', 10)
+        self. translation_publisher         = self.__node . create_publisher(Translation, 'translation_topic', 10)
+        
+        self. reduced_com_subscriber        = self.__node . create_subscription(UnderactuatedCom, 'un_att_com', self.com_callback, 1)
+        
+        self. un_att_com = UnderactuatedCom()
+        self. un_att_com. time_stamp = 0.0
+        self. un_att_com. stroke_freq = 10.0
+        self. un_att_com. rudder_pos = 0.0
+        self. un_att_com. htail_pos = 0.0
+        
+        
         package_dir = get_package_share_directory('clawed_flapper')
         Wing40X_file_path = os.path.join(package_dir, 'resource', 'SimpleFlapper0Wing40BLE_X_pos.npy')
         Wing40Y_file_path = os.path.join(package_dir, 'resource', 'SimpleFlapper0Wing40BLE_Y_pos.npy')
@@ -189,12 +203,19 @@ class ClawedFlapperDriver:
         Zero_av = np.matrix([[0],[0],[0]])
         self. Angular_velocity_filter = LPSF(Zero_av, 8, 0.8, self. Simulation_Gap)
         
-        self. RecordCount = 0
+        self. RecordCount = 0.0
         self. Time_stamp = 0.0
-        self. Theta       = 0
-        self. StrokeFreq  = 10
+        self. Theta       = 0.0
+        self. StrokeFreq  = 10.0
+        self. roll_rudder_amplitude  = 0.0
+        self. H_tail_amplitude  = 0.0
         print("Parameters settings completed!!")
 
+    def com_callback(self, un_att_com):
+        self. un_att_com = un_att_com
+    
+    
+    
     def update_orientation_vector(self):
         self.LU_OrVec = self.LU_wing.getOrientation()
         self.LD_OrVec = self.LD_wing.getOrientation()
@@ -515,59 +536,45 @@ class ClawedFlapperDriver:
             omega_y = omega_now[1,0]
             omega_z = omega_now[2,0]
             
-            self. anuglar_vel = AngularVel()
-            self. anuglar_vel. time_stamp = self. Time_stamp 
-            self. anuglar_vel. x = omega_x
-            self. anuglar_vel. y = omega_y
-            self. anuglar_vel. z = omega_z
+            self. anuglar_vel_4sub = AngularVel()
+            self. anuglar_vel_4sub. time_stamp = self. Time_stamp 
+            self. anuglar_vel_4sub. x = omega_x
+            self. anuglar_vel_4sub. y = omega_y
+            self. anuglar_vel_4sub. z = omega_z
             
-            self. angular_vel_publisher.publish(self. anuglar_vel)
-            
-            k_rud = 1
-            k_ele = 1
-            k_omega_x = 5e-2
-            k_omega_y = 5e-2
-
-            roll_rudder_amplitude = - k_rud * (Gamma_des_y * Gamma_now_z - Gamma_des_z * Gamma_now_y) + k_omega_x * omega_x
-            H_tail_amplitude = k_ele * (Gamma_des_z * Gamma_now_x - Gamma_des_x * Gamma_now_z) - k_omega_y * omega_y
-
-            self. alt_now = self. Flapper_translation_value[2]
-            alt_vel_des = 0 #alt_des_vel_list[alt_des_vel_i]
-            # alt_vel_des = -0.3
-            
-            self. alt_des = self. alt_des + alt_vel_des * (self. Controller_Gap_vs_Simulation_Gap * self.Simulation_Gap)
-            
-            alt_vel = (self. alt_now - self. alt_last) / (self. Controller_Gap_vs_Simulation_Gap * self.Simulation_Gap)
-            
-            self. alt_last = self. alt_now
-            
-            k_i = 0.1
-            k_p = 10
-            k_d = 3
-            
-            e_alt = k_p * (self. alt_des - self. alt_now)
-            e_alt_vel = k_d * (alt_vel_des - alt_vel)
-            
-            e_alt = max (- self. alt_err_mag_max, min(self. alt_err_mag_max, e_alt))
-            # e_alt_vel = max (- alt_vel_mag_max, min(alt_vel_mag_max, e_alt_vel))
-        
-            
-            self. alt_int = self. alt_int + k_i * (self. alt_des - self. alt_now)
-            self. alt_int = max (- self. alt_int_mag_max, min(self. alt_int_mag_max, self. alt_int))
+            self. angular_vel_publisher.publish(self. anuglar_vel_4sub)
             
             
+            self. reduced_gamma_now_4sub = UnderactuatedAttGamma()
+            self. reduced_gamma_now_4sub. time_stamp = self. Time_stamp 
+            self. reduced_gamma_now_4sub. x = Gamma_now_x
+            self. reduced_gamma_now_4sub. y = Gamma_now_y
+            self. reduced_gamma_now_4sub. z = Gamma_now_z 
             
-            StrokeFreq_def =  11
-            self. StrokeFreq = StrokeFreq_def + self. alt_int + e_alt + e_alt_vel
+            self. reduced_att_gamma_publisher.publish(self. reduced_gamma_now_4sub)
+            
+            
+            self. pos_now_4sub = Translation()
+            self. pos_now_4sub. time_stamp = self. Time_stamp 
+            self. pos_now_4sub.x = self.Flapper_translation_value[0]
+            self. pos_now_4sub.y = self.Flapper_translation_value[1]
+            self. pos_now_4sub.z = self.Flapper_translation_value[2]
+            
+            self. translation_publisher.publish(self.pos_now_4sub)
+            
                     
 
+            self. StrokeFreq                = self. un_att_com. stroke_freq
             
+            self. roll_rudder_amplitude     = self. un_att_com. rudder_pos
             
-            self. roll_rudder_amplitude = max( - self. roll_rudder_mag_max, \
-                                    min ( roll_rudder_amplitude, self. roll_rudder_mag_max))
+            self. H_tail_amplitude          = self. un_att_com. htail_pos
             
-            self. H_tail_amplitude = max ( - self. H_tail_mag_max, \
-                                    min (H_tail_amplitude, self. H_tail_mag_max))
+            # self. roll_rudder_amplitude = max( - self. roll_rudder_mag_max, \
+            #                         min ( self. roll_rudder_amplitude, self. roll_rudder_mag_max))
+            # Maybe we donnot need the limitation here.
+            # self. H_tail_amplitude = max ( - self. H_tail_mag_max, \
+            #                         min (self. H_tail_amplitude, self. H_tail_mag_max))
             
         self. Real_motor_H_tail_joint. setPosition(self. H_tail_amplitude)
         
