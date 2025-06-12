@@ -1,14 +1,14 @@
 
-<h2 style="color:blue;">Welcome</h2>
+# Welcome to Ros2FlapperSimu
 
-# How to run the simulation:
+## How to run the simulation:
 ```
 ubuntu@ubuntu-ASUS-TUF-Gaming-F15-FX507ZV4-FX507ZV4:cd ros2_ws
 ubuntu@ubuntu-ASUS-TUF-Gaming-F15-FX507ZV4-FX507ZV4:~/ros2_ws$ source install/local_setup.bash
 ubuntu@ubuntu-ASUS-TUF-Gaming-F15-FX507ZV4-FX507ZV4:~/ros2_ws$ ros2 launch clawed_flapper clawed_flapper_launch.py
 ```
 
-# How to build:
+## How to build:
 ```
 colcon build
 ```
